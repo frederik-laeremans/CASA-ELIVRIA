@@ -390,7 +390,11 @@ function ArrivalFields({ v, set }){
       </div>
       <div>
         <label className="block text-xs text-stone-500 mb-1">Sleutel</label>
-        <input type="text" value={v.key_status} onChange={e=>set('key_status',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring"/>
+        <select value={v.key_status} onChange={e=>set('key_status',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring">
+          <option value="In Possession">In bezit</option>
+          <option value="To Collect">Af te halen bij aankomst</option>
+          <option value="Key Safe">Sleutelkluis</option>
+        </select>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <label className="flex items-center gap-2 text-xs text-stone-600"><input type="checkbox" checked={v.clean_needed} onChange={e=>set('clean_needed',e.target.checked)}/> Kuis nodig</label>
@@ -398,11 +402,17 @@ function ArrivalFields({ v, set }){
       </div>
       <div>
         <label className="block text-xs text-stone-500 mb-1">Food pack</label>
-        <input type="text" value={v.food_pack} onChange={e=>set('food_pack',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring"/>
+        <select value={v.food_pack} onChange={e=>set('food_pack',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring">
+          <option value="No F/P Required">Niet nodig</option>
+          <option value="F/P Required">Gewenst</option>
+        </select>
       </div>
       <div>
         <label className="block text-xs text-stone-500 mb-1">Autoverhuur/transfers</label>
-        <input type="text" value={v.car_hire_transfers} onChange={e=>set('car_hire_transfers',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring"/>
+        <select value={v.car_hire_transfers} onChange={e=>set('car_hire_transfers',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring">
+          <option value="No">Nee</option>
+          <option value="Yes">Ja</option>
+        </select>
       </div>
       <div>
         <label className="block text-xs text-stone-500 mb-1">Speciale wensen (optioneel)</label>
