@@ -317,7 +317,7 @@ function ArrivalFields({ v, set }){
   return (
     <>
       <div>
-        <label className="block text-xs text-stone-500 mb-1">Naam (surname)</label>
+        <label className="block text-xs text-stone-500 mb-1">Naam van wie effectief gaat (bv. Wesley &amp; Yasmin)</label>
         <input type="text" value={v.surname} onChange={e=>set('surname',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" required/>
       </div>
       <div className="grid grid-cols-2 gap-2">
@@ -393,6 +393,7 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
   const [requests,setRequests]=useState([]);
   const [start,setStart]=useState("");
   const [end,setEnd]=useState("");
+  const [pickStart,setPickStart]=useState(null); // Date tijdens het klikken in de kalender, of null
   const [notes,setNotes]=useState("");
   const [msg,setMsg]=useState("");
   const [arrival,setArrival]=useState(()=>defaultArrivalValues(myProfile.display_name));
@@ -421,9 +422,9 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
   }
   function bookerLabel(b){
     const owner = ownerMap[b.owner_id];
-    const booker = profilesById[b.booked_by];
-    if(booker && owner && booker.display_name !== owner.name) return owner.name + " — via " + booker.display_name;
-    return owner ? owner.name : "?";
+    const ownerName = owner ? owner.name : "?";
+    if(b.surname && b.surname.trim() && b.surname.trim() !== ownerName) return ownerName + " — " + b.surname;
+    return ownerName;
   }
   function myRequestFor(bookingId){
     return requests.find(r => r.booking_id===bookingId && r.status==='pending' && r.requested_by_owner===myOwnerId);
@@ -460,7 +461,7 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
     const { error } = await sb.from('bookings').insert(row);
     if(error) setMsg("Boeken mislukt: " + error.message);
     else {
-      setStart(""); setEnd(""); setNotes(""); setArrival(defaultArrivalValues(myProfile.display_name));
+      setStart(""); setEnd(""); setPickStart(null); setNotes(""); setArrival(defaultArrivalValues(myProfile.display_name));
       load();
       sendArrivalEmail({ ...row, start_date:start, end_date:end });
     }
@@ -535,6 +536,32 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
     return active.find(b => parse(b.start_date) <= day && day < parse(b.end_date));
   }
 
+  function handleDayClick(day){
+    if(bookingFor(day)) return; // bezette dag: niet klikbaar
+    if(!pickStart){
+      setPickStart(day); setStart(fmt(day)); setEnd(""); setMsg("");
+      return;
+    }
+    if(fmt(day)===fmt(pickStart)){
+      setPickStart(null); setStart(""); setEnd(""); // zelfde dag opnieuw = annuleren
+      return;
+    }
+    if(day < pickStart){
+      setPickStart(day); setStart(fmt(day)); setEnd(""); // vroegere dag = nieuwe aankomst
+      return;
+    }
+    let d = addDays(pickStart,1), blocked = false;
+    while(d <= day){ if(bookingFor(d)){ blocked = true; break; } d = addDays(d,1); }
+    if(blocked){
+      setMsg("Er zit een bezette dag tussen je gekozen periode. Kies opnieuw.");
+      setPickStart(null); setStart(""); setEnd("");
+      return;
+    }
+    setEnd(fmt(addDays(day,1))); setPickStart(null);
+  }
+  function manualSetStart(v){ setPickStart(null); setStart(v); }
+  function manualSetEnd(v){ setPickStart(null); setEnd(v); }
+
   const upcoming = bookings.filter(b => parse(b.end_date) >= today0())
                             .sort((a,b)=> a.start_date.localeCompare(b.start_date));
 
@@ -562,20 +589,26 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
             const b = bookingFor(day);
             const owner = b ? ownerMap[b.owner_id] : null;
             const reserved = b && b.status==='voorbehouden';
+            const isPickStart = pickStart && fmt(day)===fmt(pickStart) && !end;
+            const inPending = !owner && start && end && parse(start)<=day && day<parse(end);
             return (
-              <div key={i} className={"aspect-square rounded p-1 text-xs relative " + (inMonth ? "" : "opacity-30")}
+              <div key={i} onClick={()=>handleDayClick(day)}
+                   className={"aspect-square rounded p-1 text-xs relative " + (inMonth ? "" : "opacity-30") + (owner ? "" : " cursor-pointer hover:ring-2 hover:ring-[var(--brass)]")}
                    style={{
-                     background: owner ? (reserved ? "repeating-linear-gradient(45deg,"+owner.color+",_"+owner.color+"_4px,transparent_4px,transparent_8px)" : owner.color) : "#fff",
+                     background: owner ? (reserved ? "repeating-linear-gradient(45deg,"+owner.color+",_"+owner.color+"_4px,transparent_4px,transparent_8px)" : owner.color) : ((isPickStart||inPending) ? "var(--paper-dark)" : "#fff"),
                      color: owner ? "#fff" : "var(--ink)",
-                     border: reserved ? "2px solid "+owner.color : "1px solid var(--line)",
-                     backgroundColor: owner ? (reserved ? "#fff" : owner.color) : "#fff"
+                     border: reserved ? "2px solid "+owner.color : ((isPickStart||inPending) ? "2px dashed var(--brass)" : "1px solid var(--line)"),
+                     backgroundColor: owner ? (reserved ? "#fff" : owner.color) : ((isPickStart||inPending) ? "var(--paper-dark)" : "#fff")
                    }}>
                 <span className="absolute top-1 left-1.5" style={{color: owner && !reserved ? "#fff" : (owner ? owner.color : "var(--ink)")}}>{day.getDate()}</span>
-                {owner && <span className="absolute bottom-1 left-1.5 right-1.5 truncate text-[9px] font-medium" style={{color: reserved ? owner.color : "#fff"}}>{owner.name}{b.rooms_used ? " · "+b.rooms_used+"k" : ""}{reserved ? " ⧗" : ""}</span>}
+                {owner && <span className="absolute bottom-1 left-1.5 right-1.5 truncate text-[9px] font-medium" style={{color: reserved ? owner.color : "#fff"}}>{(b.surname && b.surname.trim()) || owner.name}{b.rooms_used ? " · "+b.rooms_used+"k" : ""}{reserved ? " ⧗" : ""}</span>}
               </div>
             );
           })}
         </div>
+        <p className="text-xs text-stone-500 mt-2">
+          {pickStart ? "Aankomst gekozen: " + fmt(pickStart) + " — klik nu je vertrekdag." : "Tip: klik een vrije dag voor aankomst, klik een tweede dag voor vertrek. Of typ de data hiernaast in."}
+        </p>
         <div className="flex gap-3 mt-3 flex-wrap text-xs">
           {owners.map(o=>(
             <span key={o.id} className="flex items-center gap-1.5">
@@ -591,11 +624,11 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
           <form onSubmit={addBooking} className="space-y-2">
             <div>
               <label className="block text-xs text-stone-500 mb-1">Aankomst</label>
-              <input type="date" value={start} onChange={e=>setStart(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" required/>
+              <input type="date" value={start} onChange={e=>manualSetStart(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" required/>
             </div>
             <div>
               <label className="block text-xs text-stone-500 mb-1">Vertrek</label>
-              <input type="date" value={end} onChange={e=>setEnd(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" required/>
+              <input type="date" value={end} onChange={e=>manualSetEnd(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" required/>
             </div>
             <ArrivalFields v={arrival} set={setArrivalField}/>
             <div>
