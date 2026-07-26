@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Casa Elviria 31 — Logboek</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%231E2A24'/%3E%3Ctext x='32' y='42' font-family='Georgia,serif' font-size='26' fill='%23B08D57' text-anchor='middle'%3ECE%3C/text%3E%3C/svg%3E">
+<meta name="theme-color" content="#1E2A24">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+<style>
+  :root{
+    --paper:#FAF6EE;
+    --paper-dark:#F1E8D6;
+    --ink:#2B2A25;
+    --pine:#1E2A24;
+    --pine-2:#2A3B33;
+    --brass:#B08D57;
+    --line:#E3D8C1;
+    --terracotta:#B5651D;
+  }
+  html,body{background:var(--paper);color:var(--ink);font-family:'Inter',sans-serif;}
+  .font-display{font-family:'Fraunces',serif;}
+  .marbella-banner{width:100%;height:88px;display:block;}
+  .ledger-row{border-bottom:1px dashed var(--line);}
+  .ledger-row:last-child{border-bottom:none;}
+  .stamp{
+    display:inline-flex;align-items:center;gap:.35rem;
+    border:2px solid currentColor;border-radius:9999px;
+    padding:.15rem .6rem;font-family:'Fraunces',serif;font-weight:600;
+    letter-spacing:.03em;transform:rotate(-2deg);font-size:.72rem;
+  }
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+  input,select,textarea{background:#fff;}
+  .focus-ring:focus{outline:2px solid var(--brass);outline-offset:1px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useCallback, useContext } = React;
+
+/* ============================================================
+   CONFIGURATIE — vul dit in met jouw eigen Supabase-project.
+   Zie README.md voor de stappen.
+   ============================================================ */
+const SUPABASE_URL = "https://ifvwexrgqtfzflvubsvd.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_3aZJrjBhYoHwQ_Z5TA9m3A_0sdIy9wm";
+const HOUSE_NAME = "Casa Elviria 31";
+const PROPERTY_REF = "20084";
+const MAX_ROOMS = 6;
+
+// EmailJS — zie README.md voor de stappen om dit gratis aan te maken
+const EMAILJS_PUBLIC_KEY = "PLAATS_HIER_JE_EMAILJS_PUBLIC_KEY";
+const EMAILJS_SERVICE_ID = "PLAATS_HIER_JE_EMAILJS_SERVICE_ID";
+const EMAILJS_TEMPLATE_ID = "PLAATS_HIER_JE_EMAILJS_TEMPLATE_ID";
+const EMAILJS_NOTIFY_TEMPLATE_ID = "PLAATS_HIER_JE_EMAILJS_NOTIFY_TEMPLATE_ID";
+const MASTER_EMAIL = "frederik@zero-degrees.be";
+if(window.emailjs) emailjs.init(EMAILJS_PUBLIC_KEY);
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const MONTHS = ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
+const DAYS = ["ma","di","wo","do","vr","za","zo"];
+
+function fmt(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function parse(s){ const [y,m,day]=s.split('-').map(Number); return new Date(y, m-1, day); }
+function addDays(d,n){ const c=new Date(d); c.setDate(c.getDate()+n); return c; }
+function overlaps(aStart,aEnd,bStart,bEnd){ return aStart < bEnd && bStart < aEnd; }
+function today0(){ const t=new Date(); t.setHours(0,0,0,0); return t; }
+function toDMY(isoStr){ const d=parse(isoStr); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); }
+function isoWeekStart(year, week){
+  const jan4 = new Date(year,0,4);
+  const jan4Day = (jan4.getDay()+6)%7;
+  const week1Monday = addDays(jan4, -jan4Day);
+  return addDays(week1Monday, (week-1)*7);
+}
+
+async function sendArrivalEmail(booking){
+  if(!window.emailjs || EMAILJS_SERVICE_ID.startsWith("PLAATS_HIER")) { console.warn("EmailJS niet geconfigureerd, mail overgeslagen."); return; }
+  try{
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      property_ref: PROPERTY_REF,
+      surname: booking.surname || "",
+      adults: booking.adults ?? "",
+      children: booking.children ?? "",
+      today_date: toDMY(fmt(new Date())),
+      arrival: toDMY(booking.start_date),
+      departure: toDMY(booking.end_date),
+      arrival_time: booking.arrival_time || "",
+      departure_time: booking.departure_time || "",
+      key_status: booking.key_status || "In Possession",
+      clean: booking.clean_needed ? "Yes" : "No",
+      mid_stay_servicing: booking.mid_stay_servicing ? "Yes" : "No",
+      food_pack: booking.food_pack || "No F/P Required",
+      car_hire_transfers: booking.car_hire_transfers || "No",
+      special_requirements: booking.special_requirements || "-",
+      rooms_used: (booking.rooms_used || MAX_ROOMS) + " / " + MAX_ROOMS,
+      confirm_booking: "Yes",
+      first_form_booking: "Yes"
+    });
+  } catch(e){ console.error("Mail versturen mislukt:", e); }
+}
+
+async function sendNotifyEmail(toEmails, subject, message){
+  if(!window.emailjs || EMAILJS_NOTIFY_TEMPLATE_ID.startsWith("PLAATS_HIER")) { console.warn("EmailJS notificatie niet geconfigureerd, mail overgeslagen."); return; }
+  const to = [...new Set([...(toEmails||[]), MASTER_EMAIL])].filter(Boolean);
+  if(to.length===0) return;
+  try{
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_NOTIFY_TEMPLATE_ID, { to_email: to.join(','), subject, message });
+  } catch(e){ console.error("Notificatiemail mislukt:", e); }
+}
+
+/* ---------------- BEVESTIGINGSDIALOOG (i.p.v. browser confirm/alert) ---------------- */
+const ConfirmCtx = React.createContext(()=>Promise.resolve(false));
+function useConfirm(){ return useContext(ConfirmCtx); }
+
+function ConfirmProvider({ children }){
+  const [state,setState]=useState(null); // { message, resolve, alertOnly }
+  const ask = useCallback((message, opts={})=>{
+    return new Promise(resolve=>{
+      setState({ message, resolve, alertOnly: !!opts.alertOnly });
+    });
+  },[]);
+  function respond(v){ state.resolve(v); setState(null); }
+
+  return (
+    <ConfirmCtx.Provider value={ask}>
+      {children}
+      {state && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:"rgba(30,42,36,0.55)"}}>
+          <div className="w-full max-w-sm bg-[var(--paper)] rounded-lg p-6 shadow-2xl border border-[var(--line)]">
+            <p className="text-sm text-stone-700 mb-5">{state.message}</p>
+            <div className="flex gap-2 justify-end">
+              {!state.alertOnly && (
+                <button onClick={()=>respond(false)} className="text-sm px-4 py-2 rounded text-stone-600 border border-[var(--line)]">Annuleer</button>
+              )}
+              <button onClick={()=>respond(true)} className="text-sm px-4 py-2 rounded text-white font-medium" style={{background:"var(--pine)"}}>
+                {state.alertOnly ? "Oké" : "Bevestig"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </ConfirmCtx.Provider>
+  );
+}
+
+/* ---------------- LOGIN / REGISTREREN ---------------- */
+function Login(){
+  const [mode,setMode]=useState("login"); // login | register | registered
+  const [name,setName]=useState("");
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [error,setError]=useState("");
+  const [loading,setLoading]=useState(false);
+
+  async function submitLogin(e){
+    e.preventDefault();
+    setLoading(true); setError("");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if(error) setError("Inloggen mislukt. Controleer e-mail en wachtwoord (en of je e-mail al bevestigd is).");
+    setLoading(false);
+  }
+
+  async function submitRegister(e){
+    e.preventDefault();
+    setLoading(true); setError("");
+    const { error } = await supabase.auth.signUp({
+      email, password,
+      options: { data: { display_name: name } }
+    });
+    if(error) setError("Registreren mislukt: " + error.message);
+    else setMode("registered");
+    setLoading(false);
+  }
+
+  if(mode==="registered"){
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4" style={{background:"var(--pine)"}}>
+        <div className="w-full max-w-sm bg-[var(--paper)] rounded-lg p-8 shadow-xl border border-[var(--line)] text-sm text-stone-700">
+          <h1 className="font-display text-2xl mb-3" style={{color:"var(--pine)"}}>Bijna klaar</h1>
+          <p>Bevestig eerst je e-mailadres via de link die we net gestuurd hebben. Daarna kan je inloggen — de beheerder moet je account nog wel goedkeuren voor je iets kan boeken.</p>
+          <button onClick={()=>setMode("login")} className="w-full mt-5 py-2 rounded font-medium text-white" style={{background:"var(--pine)"}}>Naar inloggen</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4" style={{background:"var(--pine)"}}>
+      <form onSubmit={mode==="login" ? submitLogin : submitRegister} className="w-full max-w-sm bg-[var(--paper)] rounded-lg p-8 shadow-xl border border-[var(--line)]">
+        <h1 className="font-display text-3xl mb-1" style={{color:"var(--pine)"}}>{HOUSE_NAME}</h1>
+        <p className="text-sm text-stone-600 mb-6">Logboek voor boekingen, kosten en onderhoud.</p>
+
+        {mode==="register" && (
+          <>
+            <label className="block text-xs uppercase tracking-wide text-stone-500 mb-1">Naam</label>
+            <input className="w-full border border-[var(--line)] rounded px-3 py-2 mb-4 focus-ring" type="text" value={name} onChange={e=>setName(e.target.value)} required />
+          </>
+        )}
+        <label className="block text-xs uppercase tracking-wide text-stone-500 mb-1">E-mail</label>
+        <input className="w-full border border-[var(--line)] rounded px-3 py-2 mb-4 focus-ring" type="email" value={email} onChange={e=>setEmail(e.target.value)} required />
+        <label className="block text-xs uppercase tracking-wide text-stone-500 mb-1">Wachtwoord</label>
+        <input className="w-full border border-[var(--line)] rounded px-3 py-2 mb-4 focus-ring" type="password" value={password} onChange={e=>setPassword(e.target.value)} required minLength={6}/>
+        {error && <p className="text-red-700 text-sm mb-3">{error}</p>}
+        <button disabled={loading} className="w-full py-2 rounded font-medium text-white" style={{background:"var(--pine)"}}>
+          {loading ? "Bezig..." : (mode==="login" ? "Inloggen" : "Registreren")}
+        </button>
+        <button type="button" onClick={()=>{ setMode(mode==="login" ? "register" : "login"); setError(""); }} className="w-full mt-3 text-xs text-stone-500 underline">
+          {mode==="login" ? "Nog geen account? Registreer hier" : "Al een account? Log in"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/* ---------------- WACHTKAMER ---------------- */
+function Wachtkamer(){
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4" style={{background:"var(--pine)"}}>
+      <div className="w-full max-w-sm bg-[var(--paper)] rounded-lg p-8 shadow-xl border border-[var(--line)] text-sm text-stone-700">
+        <h1 className="font-display text-2xl mb-3" style={{color:"var(--pine)"}}>Bijna binnen</h1>
+        <p>Je account is aangemaakt en bevestigd, maar moet nog goedgekeurd worden door de beheerder en gekoppeld aan een eigenaarsgroep. Even geduld.</p>
+        <button onClick={()=>supabase.auth.signOut()} className="w-full mt-5 py-2 rounded font-medium text-white" style={{background:"var(--pine)"}}>Uitloggen</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- MARBELLA BOOG-ILLUSTRATIE (header-banner) ---------------- */
+function MarbellaBanner(){
+  return (
+    <svg className="marbella-banner" viewBox="0 0 1200 220" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="mbSky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#1E2A24"/>
+          <stop offset="45%" stopColor="#5B3A2E"/>
+          <stop offset="75%" stopColor="#C77B3B"/>
+          <stop offset="100%" stopColor="#F0B15E"/>
+        </linearGradient>
+        <radialGradient id="mbSun" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#FFF3D6" stopOpacity="0.95"/>
+          <stop offset="40%" stopColor="#F0B15E" stopOpacity="0.55"/>
+          <stop offset="100%" stopColor="#F0B15E" stopOpacity="0"/>
+        </radialGradient>
+        <linearGradient id="mbSea" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#2A3B33"/>
+          <stop offset="100%" stopColor="#1E2A24"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="1200" height="220" fill="url(#mbSky)"/>
+      <rect x="0" y="150" width="1200" height="70" fill="url(#mbSea)"/>
+      <line x1="0" y1="150" x2="1200" y2="150" stroke="#F0E0BE" strokeOpacity="0.3" strokeWidth="1"/>
+      <circle cx="600" cy="140" r="90" fill="url(#mbSun)"/>
+      <circle cx="600" cy="140" r="34" fill="#FFF3D6"/>
+      <rect x="590" y="150" width="20" height="60" fill="#FFF3D6" opacity="0.25"/>
+      <path fillRule="evenodd" fill="#16201C"
+        d="M430,220 L430,70 A170,170 0 0 1 770,70 L770,220 L710,220 L710,95 A110,110 0 0 0 490,95 L490,220 Z"/>
+      <path fill="none" stroke="#B08D57" strokeWidth="2" opacity="0.8"
+        d="M430,220 L430,70 A170,170 0 0 1 770,70 L770,220"/>
+      <path fill="none" stroke="#B08D57" strokeWidth="1.5" opacity="0.6"
+        d="M490,220 L490,95 A110,110 0 0 1 710,95 L710,220"/>
+      <g fill="#16201C" opacity="0.9">
+        <path d="M20,220 C40,190 80,175 130,178 C90,160 50,165 20,190 Z"/>
+        <path d="M20,220 C60,200 100,205 140,225 C100,195 55,195 20,205 Z"/>
+        <path d="M1180,220 C1160,190 1120,175 1070,178 C1110,160 1150,165 1180,190 Z"/>
+        <path d="M1180,220 C1140,200 1100,205 1060,225 C1100,195 1145,195 1180,205 Z"/>
+      </g>
+    </svg>
+  );
+}
+
+/* ---------------- HEADER / TABS ---------------- */
+function Header({ profile, tab, setTab }){
+  const tabs = [["kalender","Kalender"],["kosten","Kosten"],["onderhoud","Onderhoud"],["vasteweken","Vaste weken"]];
+  if(profile && profile.role==="admin") tabs.push(["beheer","Beheer"]);
+  return (
+    <header style={{background:"var(--pine)"}} className="text-[var(--paper)]">
+      <MarbellaBanner/>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-4 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="font-display text-2xl sm:text-3xl">{HOUSE_NAME}</h1>
+          <p className="text-xs text-[var(--brass)] tracking-wide uppercase mt-1">
+            {profile ? `Ingelogd als ${profile.display_name}` : ""}
+          </p>
+        </div>
+        <button onClick={()=>supabase.auth.signOut()} className="text-xs uppercase tracking-wide border border-[var(--brass)] text-[var(--brass)] rounded-full px-4 py-1.5 hover:bg-[var(--brass)] hover:text-[var(--pine)] transition">
+          Uitloggen
+        </button>
+      </div>
+      <nav className="max-w-5xl mx-auto px-4 sm:px-6 flex gap-1 border-t border-white/10 overflow-x-auto">
+        {tabs.map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)}
+            className={"px-4 py-3 text-sm font-medium border-b-2 -mb-px transition whitespace-nowrap " + (tab===id ? "border-[var(--brass)] text-white" : "border-transparent text-white/50 hover:text-white/80")}>
+            {label}
+          </button>
+        ))}
+      </nav>
+    </header>
+  );
+}
+
+/* ---------------- AANKOMST-GEGEVENS (gedeeld formulier) ---------------- */
+function ArrivalFields({ v, set }){
+  return (
+    <>
+      <div>
+        <label className="block text-xs text-stone-500 mb-1">Naam (surname)</label>
+        <input type="text" value={v.surname} onChange={e=>set('surname',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" required/>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-xs text-stone-500 mb-1">Volwassenen</label>
+          <input type="number" min="0" value={v.adults} onChange={e=>set('adults',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" required/>
+        </div>
+        <div>
+          <label className="block text-xs text-stone-500 mb-1">Kinderen</label>
+          <input type="number" min="0" value={v.children} onChange={e=>set('children',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring"/>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-xs text-stone-500 mb-1">Aankomsttijd</label>
+          <input type="text" placeholder="bv. 10am" value={v.arrival_time} onChange={e=>set('arrival_time',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring"/>
+        </div>
+        <div>
+          <label className="block text-xs text-stone-500 mb-1">Vertrektijd</label>
+          <input type="text" placeholder="bv. 12pm" value={v.departure_time} onChange={e=>set('departure_time',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring"/>
+        </div>
+      </div>
+      <div>
+        <label className="block text-xs text-stone-500 mb-1">Aantal kamers in gebruik (max {MAX_ROOMS})</label>
+        <select value={v.rooms_used} onChange={e=>set('rooms_used',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring">
+          {Array.from({length:MAX_ROOMS},(_,i)=>i+1).map(n=><option key={n} value={n}>{n} {n===MAX_ROOMS ? "(volledige bezetting)" : ""}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs text-stone-500 mb-1">Sleutel</label>
+        <input type="text" value={v.key_status} onChange={e=>set('key_status',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring"/>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="flex items-center gap-2 text-xs text-stone-600"><input type="checkbox" checked={v.clean_needed} onChange={e=>set('clean_needed',e.target.checked)}/> Kuis nodig</label>
+        <label className="flex items-center gap-2 text-xs text-stone-600"><input type="checkbox" checked={v.mid_stay_servicing} onChange={e=>set('mid_stay_servicing',e.target.checked)}/> Onderhoud tijdens verblijf</label>
+      </div>
+      <div>
+        <label className="block text-xs text-stone-500 mb-1">Food pack</label>
+        <input type="text" value={v.food_pack} onChange={e=>set('food_pack',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring"/>
+      </div>
+      <div>
+        <label className="block text-xs text-stone-500 mb-1">Autoverhuur/transfers</label>
+        <input type="text" value={v.car_hire_transfers} onChange={e=>set('car_hire_transfers',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring"/>
+      </div>
+      <div>
+        <label className="block text-xs text-stone-500 mb-1">Speciale wensen (optioneel)</label>
+        <textarea value={v.special_requirements} onChange={e=>set('special_requirements',e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" rows="2"/>
+      </div>
+    </>
+  );
+}
+
+function defaultArrivalValues(displayName){
+  return {
+    surname: displayName || "",
+    adults: "", children: "0",
+    arrival_time: "", departure_time: "",
+    rooms_used: MAX_ROOMS,
+    key_status: "In Possession",
+    clean_needed: true,
+    mid_stay_servicing: false,
+    food_pack: "No F/P Required",
+    car_hire_transfers: "No",
+    special_requirements: ""
+  };
+}
+
+/* ---------------- KALENDER TAB ---------------- */
+function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfile }){
+  const confirmAction = useConfirm();
+  const [cursor,setCursor]=useState(()=>{ const d=new Date(); d.setDate(1); return d; });
+  const [bookings,setBookings]=useState([]);
+  const [requests,setRequests]=useState([]);
+  const [start,setStart]=useState("");
+  const [end,setEnd]=useState("");
+  const [notes,setNotes]=useState("");
+  const [msg,setMsg]=useState("");
+  const [arrival,setArrival]=useState(()=>defaultArrivalValues(myProfile.display_name));
+  const setArrivalField = (k,val)=>setArrival(a=>({...a,[k]:val}));
+
+  const [confirmingId,setConfirmingId]=useState(null);
+  const [confirmValues,setConfirmValues]=useState(()=>defaultArrivalValues(myProfile.display_name));
+  const setConfirmField = (k,val)=>setConfirmValues(a=>({...a,[k]:val}));
+
+  const myOwnerId = myProfile.owner_id;
+
+  const load = useCallback(async ()=>{
+    const [{ data: bk }, { data: rq }] = await Promise.all([
+      supabase.from('bookings').select('*').order('start_date'),
+      supabase.from('week_requests').select('*').order('created_at',{ascending:false})
+    ]);
+    setBookings(bk || []);
+    setRequests(rq || []);
+  },[]);
+  useEffect(()=>{ load(); },[load]);
+
+  // Elke actieve boeking (bevestigd of voorbehouden) blokkeert de fysieke bezetting van het huis.
+  // Vaste weken komen niet meer automatisch vrij — enkel via een goedgekeurde aanvraag.
+  function isBlocking(b){
+    return b.status==='bevestigd' || b.status==='voorbehouden';
+  }
+  function bookerLabel(b){
+    const owner = ownerMap[b.owner_id];
+    const booker = profilesById[b.booked_by];
+    if(booker && owner && booker.display_name !== owner.name) return owner.name + " — via " + booker.display_name;
+    return owner ? owner.name : "?";
+  }
+  function myRequestFor(bookingId){
+    return requests.find(r => r.booking_id===bookingId && r.status==='pending' && r.requested_by_owner===myOwnerId);
+  }
+  function myGroupEmails(ownerId){
+    return approvedProfiles.filter(p=>p.owner_id===ownerId).map(p=>p.email);
+  }
+
+  async function addBooking(e){
+    e.preventDefault();
+    setMsg("");
+    if(!myOwnerId){ setMsg("Je bent nog niet aan een eigenaarsgroep gekoppeld."); return; }
+    if(!start || !end) return;
+    const s = parse(start), en = parse(end);
+    if(en <= s){ setMsg("Vertrekdatum moet na aankomstdatum liggen."); return; }
+    const blocking = bookings.filter(isBlocking);
+    const conflictRow = blocking.find(b => overlaps(s,en,parse(b.start_date),parse(b.end_date)));
+    if(conflictRow){
+      const owner = ownerMap[conflictRow.owner_id];
+      if(conflictRow.owner_id===myOwnerId){
+        setMsg("Deze week staat al voor jouw groep klaar — bevestig ze hieronder bij 'Aankomende boekingen' in plaats van opnieuw te boeken.");
+      } else {
+        setMsg(`Deze week is voorbehouden voor ${owner ? owner.name : "een andere groep"}. Je kan ze aanvragen bij 'Aankomende boekingen' hieronder.`);
+      }
+      return;
+    }
+    const row = {
+      owner_id: myOwnerId, booked_by: myProfile.id, start_date: start, end_date: end, notes, status:'bevestigd',
+      surname: arrival.surname, adults: parseInt(arrival.adults||0,10), children: parseInt(arrival.children||0,10),
+      arrival_time: arrival.arrival_time, departure_time: arrival.departure_time, rooms_used: parseInt(arrival.rooms_used,10),
+      key_status: arrival.key_status, clean_needed: arrival.clean_needed, mid_stay_servicing: arrival.mid_stay_servicing,
+      food_pack: arrival.food_pack, car_hire_transfers: arrival.car_hire_transfers, special_requirements: arrival.special_requirements
+    };
+    const { error } = await supabase.from('bookings').insert(row);
+    if(error) setMsg("Boeken mislukt: " + error.message);
+    else {
+      setStart(""); setEnd(""); setNotes(""); setArrival(defaultArrivalValues(myProfile.display_name));
+      load();
+      sendArrivalEmail({ ...row, start_date:start, end_date:end });
+    }
+  }
+
+  async function removeBooking(id){
+    if(!(await confirmAction("Deze boeking verwijderen?"))) return;
+    await supabase.from('bookings').delete().eq('id', id);
+    load();
+  }
+
+  function openConfirm(b){
+    setConfirmingId(b.id);
+    setConfirmValues(defaultArrivalValues(myProfile.display_name));
+  }
+
+  async function submitConfirm(e, b){
+    e.preventDefault();
+    const updates = {
+      status:'bevestigd', confirm_by:null, booked_by: myProfile.id,
+      surname: confirmValues.surname, adults: parseInt(confirmValues.adults||0,10), children: parseInt(confirmValues.children||0,10),
+      arrival_time: confirmValues.arrival_time, departure_time: confirmValues.departure_time, rooms_used: parseInt(confirmValues.rooms_used,10),
+      key_status: confirmValues.key_status, clean_needed: confirmValues.clean_needed, mid_stay_servicing: confirmValues.mid_stay_servicing,
+      food_pack: confirmValues.food_pack, car_hire_transfers: confirmValues.car_hire_transfers, special_requirements: confirmValues.special_requirements
+    };
+    await supabase.from('bookings').update(updates).eq('id', b.id);
+    setConfirmingId(null);
+    load();
+    sendArrivalEmail({ ...b, ...updates });
+  }
+
+  async function requestWeek(b){
+    if(!myOwnerId || myOwnerId===b.owner_id) return;
+    await supabase.from('week_requests').insert({
+      booking_id: b.id, requested_by_owner: myOwnerId, requested_by_profile: myProfile.id
+    });
+    load();
+    const owner = ownerMap[b.owner_id];
+    const requestingOwner = ownerMap[myOwnerId];
+    sendNotifyEmail(
+      myGroupEmails(b.owner_id),
+      `Aanvraag voor jouw week ${fmt(parse(b.start_date))} → ${fmt(parse(b.end_date))}`,
+      `${myProfile.display_name} (${requestingOwner ? requestingOwner.name : "?"}) vraagt de week van ${fmt(parse(b.start_date))} tot ${fmt(parse(b.end_date))} aan, die nog niet ingevuld is door ${owner ? owner.name : "jouw groep"}. Log in de app in om goed te keuren of te weigeren.`
+    );
+  }
+
+  async function respondRequest(req, approve){
+    await supabase.from('week_requests').update({ status: approve ? 'approved' : 'rejected' }).eq('id', req.id);
+    const requester = profilesById[req.requested_by_profile];
+    if(approve){
+      await supabase.from('bookings').update({ owner_id: req.requested_by_owner, booked_by: req.requested_by_profile, confirm_by:null }).eq('id', req.booking_id);
+    }
+    load();
+    if(requester){
+      sendNotifyEmail(
+        [requester.email],
+        approve ? "Je aanvraag is goedgekeurd" : "Je aanvraag is geweigerd",
+        approve ? "De week is aan jouw groep toegewezen. Ga naar de kalender om ze te bevestigen met de aankomstgegevens." : "Deze week blijft bij de oorspronkelijke eigenaar."
+      );
+    }
+  }
+
+  const days = useMemo(()=>{
+    const first = new Date(cursor);
+    const startWeekday = (first.getDay()+6)%7;
+    const gridStart = addDays(first, -startWeekday);
+    return Array.from({length:42},(_,i)=>addDays(gridStart,i));
+  },[cursor]);
+
+  function bookingFor(day){
+    const active = bookings.filter(isBlocking);
+    return active.find(b => parse(b.start_date) <= day && day < parse(b.end_date));
+  }
+
+  const upcoming = bookings.filter(b => parse(b.end_date) >= today0())
+                            .sort((a,b)=> a.start_date.localeCompare(b.start_date));
+
+  const bookingsById = {}; bookings.forEach(b=>bookingsById[b.id]=b);
+  const incomingRequests = requests.filter(r => {
+    if(r.status!=='pending') return false;
+    const b = bookingsById[r.booking_id];
+    return b && b.owner_id===myOwnerId;
+  });
+
+  return (
+    <div className="grid md:grid-cols-[1fr_320px] gap-6">
+      <div className="bg-white/60 rounded-lg border border-[var(--line)] p-4">
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={()=>setCursor(c=>{ const d=new Date(c); d.setMonth(d.getMonth()-1); return d; })} className="px-2 py-1 text-lg">‹</button>
+          <h2 className="font-display text-xl" style={{color:"var(--pine)"}}>{MONTHS[cursor.getMonth()]} {cursor.getFullYear()}</h2>
+          <button onClick={()=>setCursor(c=>{ const d=new Date(c); d.setMonth(d.getMonth()+1); return d; })} className="px-2 py-1 text-lg">›</button>
+        </div>
+        <div className="grid grid-cols-7 text-center text-xs uppercase text-stone-500 mb-1">
+          {DAYS.map(d=><div key={d}>{d}</div>)}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {days.map((day,i)=>{
+            const inMonth = day.getMonth()===cursor.getMonth();
+            const b = bookingFor(day);
+            const owner = b ? ownerMap[b.owner_id] : null;
+            const reserved = b && b.status==='voorbehouden';
+            return (
+              <div key={i} className={"aspect-square rounded p-1 text-xs relative " + (inMonth ? "" : "opacity-30")}
+                   style={{
+                     background: owner ? (reserved ? "repeating-linear-gradient(45deg,"+owner.color+",_"+owner.color+"_4px,transparent_4px,transparent_8px)" : owner.color) : "#fff",
+                     color: owner ? "#fff" : "var(--ink)",
+                     border: reserved ? "2px solid "+owner.color : "1px solid var(--line)",
+                     backgroundColor: owner ? (reserved ? "#fff" : owner.color) : "#fff"
+                   }}>
+                <span className="absolute top-1 left-1.5" style={{color: owner && !reserved ? "#fff" : (owner ? owner.color : "var(--ink)")}}>{day.getDate()}</span>
+                {owner && <span className="absolute bottom-1 left-1.5 right-1.5 truncate text-[9px] font-medium" style={{color: reserved ? owner.color : "#fff"}}>{owner.name}{b.rooms_used ? " · "+b.rooms_used+"k" : ""}{reserved ? " ⧗" : ""}</span>}
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex gap-3 mt-3 flex-wrap text-xs">
+          {owners.map(o=>(
+            <span key={o.id} className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-sm inline-block" style={{background:o.color}}></span>{o.name}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <div className="bg-white/60 rounded-lg border border-[var(--line)] p-4">
+          <h3 className="font-display text-lg mb-3" style={{color:"var(--pine)"}}>Week boeken</h3>
+          <form onSubmit={addBooking} className="space-y-2">
+            <div>
+              <label className="block text-xs text-stone-500 mb-1">Aankomst</label>
+              <input type="date" value={start} onChange={e=>setStart(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" required/>
+            </div>
+            <div>
+              <label className="block text-xs text-stone-500 mb-1">Vertrek</label>
+              <input type="date" value={end} onChange={e=>setEnd(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" required/>
+            </div>
+            <ArrivalFields v={arrival} set={setArrivalField}/>
+            <div>
+              <label className="block text-xs text-stone-500 mb-1">Notitie (optioneel)</label>
+              <input type="text" value={notes} onChange={e=>setNotes(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" placeholder="bv. met de kinderen"/>
+            </div>
+            {msg && <p className="text-red-700 text-xs">{msg}</p>}
+            <button className="w-full py-2 rounded text-sm font-medium text-white mt-1" style={{background:"var(--pine)"}}>Boeken</button>
+            <p className="text-[11px] text-stone-500">Bij boeken gaat automatisch een mail naar Frederik en Casa Care met deze gegevens.</p>
+          </form>
+        </div>
+
+        <div className="bg-white/60 rounded-lg border border-[var(--line)] p-4">
+          <h3 className="font-display text-lg mb-2" style={{color:"var(--pine)"}}>Aankomende boekingen</h3>
+          <div>
+            {upcoming.length===0 && <p className="text-sm text-stone-500">Nog geen boekingen.</p>}
+            {upcoming.map(b=>{
+              const owner = ownerMap[b.owner_id];
+              const reserved = b.status==='voorbehouden';
+              const mine = b.owner_id === myOwnerId;
+              const myPending = !mine && !!myRequestFor(b.id);
+              return (
+                <div key={b.id} className="ledger-row py-2 text-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="stamp" style={{color: owner ? owner.color : "var(--pine)"}}>
+                        {fmt(parse(b.start_date))} → {fmt(parse(b.end_date))}
+                      </span>
+                      {reserved && <span className="ml-2 text-[10px] uppercase tracking-wide font-semibold" style={{color:"var(--brass)"}}>voorbehouden</span>}
+                      <p className="text-xs text-stone-600 mt-1">{bookerLabel(b)}{b.rooms_used ? " · "+b.rooms_used+"/"+MAX_ROOMS+" kamers" : ""}{b.notes ? " — " + b.notes : ""}</p>
+                      {reserved && !mine && <p className="text-[11px] mt-0.5 text-stone-500">Nog niet ingevuld door {owner ? owner.name : "de eigenaar"} — permanent voor hen gereserveerd tenzij zij een aanvraag goedkeuren.</p>}
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      {reserved && mine && confirmingId!==b.id && (
+                        <button onClick={()=>openConfirm(b)} className="text-xs font-medium px-2 py-0.5 rounded-full text-white" style={{background:"var(--pine)"}}>bevestigen</button>
+                      )}
+                      {reserved && !mine && myOwnerId && !myPending && (
+                        <button onClick={()=>requestWeek(b)} className="text-xs font-medium px-2 py-0.5 rounded-full text-white" style={{background:"var(--brass)"}}>vraag deze week aan</button>
+                      )}
+                      {myPending && <span className="text-[11px] text-stone-500">aanvraag verstuurd</span>}
+                      {mine && (
+                        <button onClick={()=>removeBooking(b.id)} className="text-xs text-red-700">verwijder</button>
+                      )}
+                    </div>
+                  </div>
+                  {confirmingId===b.id && (
+                    <form onSubmit={e=>submitConfirm(e,b)} className="mt-2 p-3 rounded border border-[var(--line)] bg-white space-y-2">
+                      <p className="text-xs text-stone-500">Vul de aankomstgegevens aan om te bevestigen:</p>
+                      <ArrivalFields v={confirmValues} set={setConfirmField}/>
+                      <div className="flex gap-2">
+                        <button type="submit" className="flex-1 py-1.5 rounded text-xs font-medium text-white" style={{background:"var(--pine)"}}>Bevestigen &amp; mail versturen</button>
+                        <button type="button" onClick={()=>setConfirmingId(null)} className="text-xs text-stone-500 px-2">annuleer</button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {incomingRequests.length>0 && (
+          <div className="bg-white/60 rounded-lg border-2 border-[var(--brass)] p-4">
+            <h3 className="font-display text-lg mb-2" style={{color:"var(--pine)"}}>Aanvragen voor jouw weken</h3>
+            {incomingRequests.map(r=>{
+              const b = bookingsById[r.booking_id];
+              const requester = profilesById[r.requested_by_profile];
+              const requestingOwner = ownerMap[r.requested_by_owner];
+              return (
+                <div key={r.id} className="ledger-row py-2 text-sm">
+                  <p className="text-xs text-stone-600">
+                    <span className="font-medium">{requester ? requester.display_name : "iemand"}</span>
+                    {requestingOwner ? " (" + requestingOwner.name + ")" : ""} vraagt {b ? fmt(parse(b.start_date))+" → "+fmt(parse(b.end_date)) : "deze week"} aan.
+                  </p>
+                  <div className="flex gap-2 mt-1.5">
+                    <button onClick={()=>respondRequest(r,true)} className="text-xs font-medium px-2.5 py-1 rounded-full text-white" style={{background:"var(--pine)"}}>goedkeuren</button>
+                    <button onClick={()=>respondRequest(r,false)} className="text-xs font-medium px-2.5 py-1 rounded-full text-red-700 border border-red-700">weigeren</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- KOSTEN TAB ---------------- */
+function KostenTab({ owners, ownerMap, profilesById, myProfile }){
+  const confirmAction = useConfirm();
+  const [expenses,setExpenses]=useState([]);
+  const [amount,setAmount]=useState("");
+  const [description,setDescription]=useState("");
+  const [date,setDate]=useState(fmt(new Date()));
+  const myOwnerId = myProfile.owner_id;
+
+  const load = useCallback(async ()=>{
+    const { data, error } = await supabase.from('expenses').select('*').order('expense_date',{ascending:false});
+    if(!error) setExpenses(data || []);
+  },[]);
+  useEffect(()=>{ load(); },[load]);
+
+  async function addExpense(e){
+    e.preventDefault();
+    if(!amount || !description || !myOwnerId) return;
+    await supabase.from('expenses').insert({ owner_id: myOwnerId, paid_by: myProfile.id, amount: parseFloat(amount), description, expense_date: date });
+    setAmount(""); setDescription(""); load();
+  }
+  async function removeExpense(id){
+    if(!(await confirmAction("Deze kost verwijderen?"))) return;
+    await supabase.from('expenses').delete().eq('id', id);
+    load();
+  }
+
+  const total = expenses.reduce((s,e)=>s+Number(e.amount),0);
+  const perOwner = owners.length ? total/owners.length : 0;
+  const totals = {};
+  owners.forEach(o=>totals[o.id]=0);
+  expenses.forEach(e=>{ totals[e.owner_id]=(totals[e.owner_id]||0)+Number(e.amount); });
+
+  return (
+    <div className="grid md:grid-cols-[1fr_320px] gap-6">
+      <div className="bg-white/60 rounded-lg border border-[var(--line)] p-4">
+        <h3 className="font-display text-lg mb-3" style={{color:"var(--pine)"}}>Kostenoverzicht</h3>
+        {expenses.length===0 && <p className="text-sm text-stone-500">Nog geen kosten geregistreerd.</p>}
+        {expenses.map(e=>{
+          const owner = ownerMap[e.owner_id];
+          const payer = profilesById[e.paid_by];
+          return (
+            <div key={e.id} className="ledger-row py-2 text-sm flex items-center justify-between gap-2">
+              <div>
+                <span className="font-medium">€ {Number(e.amount).toFixed(2)}</span>
+                <span className="text-stone-600"> — {e.description}</span>
+                <p className="text-xs text-stone-500">{e.expense_date} · {owner ? owner.name : "?"}{payer ? " (betaald door "+payer.display_name+")" : ""}</p>
+              </div>
+              {e.owner_id===myOwnerId && <button onClick={()=>removeExpense(e.id)} className="text-xs text-red-700 shrink-0">verwijder</button>}
+            </div>
+          );
+        })}
+        <div className="mt-3 pt-3 border-t border-[var(--line)] text-sm font-medium">Totaal: € {total.toFixed(2)}</div>
+      </div>
+
+      <div className="space-y-6">
+        <div className="bg-white/60 rounded-lg border border-[var(--line)] p-4">
+          <h3 className="font-display text-lg mb-3" style={{color:"var(--pine)"}}>Kost toevoegen</h3>
+          <form onSubmit={addExpense} className="space-y-2">
+            <div>
+              <label className="block text-xs text-stone-500 mb-1">Bedrag (€)</label>
+              <input type="number" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" required/>
+            </div>
+            <div>
+              <label className="block text-xs text-stone-500 mb-1">Omschrijving</label>
+              <input type="text" value={description} onChange={e=>setDescription(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" placeholder="bv. gazon maaien" required/>
+            </div>
+            <div>
+              <label className="block text-xs text-stone-500 mb-1">Datum</label>
+              <input type="date" value={date} onChange={e=>setDate(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring"/>
+            </div>
+            <button className="w-full py-2 rounded text-sm font-medium text-white mt-1" style={{background:"var(--pine)"}}>Toevoegen</button>
+          </form>
+        </div>
+
+        <div className="bg-white/60 rounded-lg border border-[var(--line)] p-4">
+          <h3 className="font-display text-lg mb-2" style={{color:"var(--pine)"}}>Verdeling</h3>
+          <p className="text-xs text-stone-500 mb-2">Bij gelijke verdeling zou elke groep € {perOwner.toFixed(2)} moeten dragen.</p>
+          {owners.map(o=>{
+            const paid = totals[o.id]||0;
+            const saldo = paid - perOwner;
+            return (
+              <div key={o.id} className="flex items-center justify-between text-sm py-1">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:o.color}}></span>{o.name}</span>
+                <span className={saldo>=0 ? "text-emerald-700" : "text-red-700"}>
+                  {saldo>=0 ? "krijgt terug" : "moet bijleggen"} € {Math.abs(saldo).toFixed(2)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- ONDERHOUD TAB ---------------- */
+function OnderhoudTab({ approvedProfiles, profilesById }){
+  const confirmAction = useConfirm();
+  const [tasks,setTasks]=useState([]);
+  const [title,setTitle]=useState("");
+  const [dueDate,setDueDate]=useState("");
+  const [assignedTo,setAssignedTo]=useState("");
+
+  const load = useCallback(async ()=>{
+    const { data, error } = await supabase.from('cleaning_tasks').select('*').order('due_date',{ascending:true, nullsFirst:false});
+    if(!error) setTasks(data || []);
+  },[]);
+  useEffect(()=>{ load(); },[load]);
+
+  async function addTask(e){
+    e.preventDefault();
+    if(!title) return;
+    await supabase.from('cleaning_tasks').insert({ title, due_date: dueDate || null, assigned_to: assignedTo || null });
+    setTitle(""); setDueDate(""); setAssignedTo(""); load();
+  }
+  async function setStatus(id, status){
+    await supabase.from('cleaning_tasks').update({ status }).eq('id', id);
+    load();
+  }
+  async function removeTask(id){
+    if(!(await confirmAction("Deze taak verwijderen?"))) return;
+    await supabase.from('cleaning_tasks').delete().eq('id', id);
+    load();
+  }
+
+  const statusLabel = { open:"te doen", bezig:"bezig", klaar:"klaar" };
+  const statusColor = { open:"#C9B98A", bezig:"#B08D57", klaar:"#1E2A24" };
+
+  return (
+    <div className="grid md:grid-cols-[1fr_320px] gap-6">
+      <div className="bg-white/60 rounded-lg border border-[var(--line)] p-4">
+        <h3 className="font-display text-lg mb-3" style={{color:"var(--pine)"}}>Onderhoud &amp; kuis</h3>
+        {tasks.length===0 && <p className="text-sm text-stone-500">Geen taken.</p>}
+        {tasks.map(t=>{
+          const assignee = t.assigned_to ? profilesById[t.assigned_to] : null;
+          return (
+            <div key={t.id} className="ledger-row py-2 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className="font-medium">{t.title}</span>
+                  <p className="text-xs text-stone-500">
+                    {t.due_date ? "tegen " + t.due_date : "geen deadline"}
+                    {assignee ? " · " + assignee.display_name : ""}
+                  </p>
+                </div>
+                <button onClick={()=>removeTask(t.id)} className="text-xs text-red-700 shrink-0">verwijder</button>
+              </div>
+              <div className="flex gap-1.5 mt-2">
+                {["open","bezig","klaar"].map(s=>(
+                  <button key={s} onClick={()=>setStatus(t.id,s)}
+                    className="text-[11px] uppercase tracking-wide rounded-full px-2.5 py-1 border"
+                    style={{
+                      borderColor: statusColor[s],
+                      color: t.status===s ? "#fff" : statusColor[s],
+                      background: t.status===s ? statusColor[s] : "transparent"
+                    }}>
+                    {statusLabel[s]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="bg-white/60 rounded-lg border border-[var(--line)] p-4 h-fit">
+        <h3 className="font-display text-lg mb-3" style={{color:"var(--pine)"}}>Taak toevoegen</h3>
+        <form onSubmit={addTask} className="space-y-2">
+          <div>
+            <label className="block text-xs text-stone-500 mb-1">Omschrijving</label>
+            <input type="text" value={title} onChange={e=>setTitle(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" placeholder="bv. dakgoot reinigen" required/>
+          </div>
+          <div>
+            <label className="block text-xs text-stone-500 mb-1">Deadline (optioneel)</label>
+            <input type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring"/>
+          </div>
+          <div>
+            <label className="block text-xs text-stone-500 mb-1">Toewijzen aan (optioneel)</label>
+            <select value={assignedTo} onChange={e=>setAssignedTo(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring">
+              <option value="">— niemand —</option>
+              {approvedProfiles.map(p=><option key={p.id} value={p.id}>{p.display_name}</option>)}
+            </select>
+          </div>
+          <button className="w-full py-2 rounded text-sm font-medium text-white mt-1" style={{background:"var(--pine)"}}>Toevoegen</button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- VASTE WEKEN TAB ---------------- */
+function VasteWekenTab({ owners, ownerMap, myProfile }){
+  const confirmAction = useConfirm();
+  const [fixedWeeks,setFixedWeeks]=useState([]);
+  const [ownerId,setOwnerId]=useState(owners[0]?.id || "");
+  const [weekNumber,setWeekNumber]=useState("");
+  const [confirmWeeksBefore,setConfirmWeeksBefore]=useState(8);
+  const [notes,setNotes]=useState("");
+  const [year,setYear]=useState(new Date().getFullYear());
+  const [genMsg,setGenMsg]=useState("");
+  const [busy,setBusy]=useState(false);
+
+  const load = useCallback(async ()=>{
+    const { data, error } = await supabase.from('fixed_weeks').select('*').order('week_number');
+    if(!error) setFixedWeeks(data || []);
+  },[]);
+  useEffect(()=>{ load(); },[load]);
+
+  async function addFixedWeek(e){
+    e.preventDefault();
+    if(!ownerId || !weekNumber) return;
+    await supabase.from('fixed_weeks').insert({
+      owner_id: ownerId, week_number: parseInt(weekNumber,10),
+      confirm_weeks_before: parseInt(confirmWeeksBefore,10) || 8, notes
+    });
+    setWeekNumber(""); setNotes(""); load();
+  }
+  async function removeFixedWeek(id){
+    if(!(await confirmAction("Deze vaste week verwijderen?"))) return;
+    await supabase.from('fixed_weeks').delete().eq('id', id);
+    load();
+  }
+
+  async function generateYear(){
+    setBusy(true); setGenMsg("");
+    const { data: existing } = await supabase.from('bookings').select('owner_id,start_date');
+    let created=0, skipped=0;
+    for(const fw of fixedWeeks){
+      const start = isoWeekStart(year, fw.week_number);
+      const end = addDays(start,7);
+      const startStr = fmt(start);
+      const already = (existing||[]).some(b => b.owner_id===fw.owner_id && b.start_date===startStr);
+      if(already){ skipped++; continue; }
+      const confirmBy = fmt(addDays(start, -(fw.confirm_weeks_before*7)));
+      const { error } = await supabase.from('bookings').insert({
+        owner_id: fw.owner_id, booked_by: myProfile.id, start_date: startStr, end_date: fmt(end),
+        notes: fw.notes || 'Vaste week', status:'voorbehouden', confirm_by: confirmBy
+      });
+      if(!error) created++;
+    }
+    setGenMsg(`${created} vaste week(en) klaargezet voor ${year}, ${skipped} bestonden al.`);
+    setBusy(false);
+  }
+
+  return (
+    <div className="grid md:grid-cols-[1fr_320px] gap-6">
+      <div className="bg-white/60 rounded-lg border border-[var(--line)] p-4">
+        <h3 className="font-display text-lg mb-1" style={{color:"var(--pine)"}}>Vaste weken per eigenaarsgroep</h3>
+        <p className="text-xs text-stone-500 mb-3">Terugkerende weeknummers, elk jaar opnieuw geldig. Bij het genereren worden ze als "voorbehouden" gezet — permanent gelockt aan hun eigenaarsgroep. Andere groepen kunnen een niet-ingevulde week wel aanvragen; enkel de eigenaar zelf kan die aanvraag goedkeuren.</p>
+        {fixedWeeks.length===0 && <p className="text-sm text-stone-500">Nog geen vaste weken ingesteld.</p>}
+        {fixedWeeks.map(fw=>{
+          const owner = ownerMap[fw.owner_id];
+          return (
+            <div key={fw.id} className="ledger-row py-2 text-sm flex items-center justify-between gap-2">
+              <div>
+                <span className="stamp" style={{color: owner ? owner.color : "var(--pine)"}}>week {fw.week_number}</span>
+                <p className="text-xs text-stone-600 mt-1">{owner ? owner.name : "?"} · bevestigen ten laatste {fw.confirm_weeks_before} weken op voorhand{fw.notes ? " — " + fw.notes : ""}</p>
+              </div>
+              <button onClick={()=>removeFixedWeek(fw.id)} className="text-xs text-red-700 shrink-0">verwijder</button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="space-y-6">
+        <div className="bg-white/60 rounded-lg border border-[var(--line)] p-4">
+          <h3 className="font-display text-lg mb-3" style={{color:"var(--pine)"}}>Vaste week toevoegen</h3>
+          <form onSubmit={addFixedWeek} className="space-y-2">
+            <div>
+              <label className="block text-xs text-stone-500 mb-1">Eigenaarsgroep</label>
+              <select value={ownerId} onChange={e=>setOwnerId(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring">
+                {owners.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-stone-500 mb-1">Weeknummer (1-53)</label>
+              <input type="number" min="1" max="53" value={weekNumber} onChange={e=>setWeekNumber(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" required/>
+            </div>
+            <div>
+              <label className="block text-xs text-stone-500 mb-1">Bevestigen ten laatste (weken op voorhand)</label>
+              <input type="number" min="0" max="52" value={confirmWeeksBefore} onChange={e=>setConfirmWeeksBefore(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring"/>
+            </div>
+            <div>
+              <label className="block text-xs text-stone-500 mb-1">Notitie (optioneel)</label>
+              <input type="text" value={notes} onChange={e=>setNotes(e.target.value)} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring" placeholder="bv. bouwverlof"/>
+            </div>
+            <button className="w-full py-2 rounded text-sm font-medium text-white mt-1" style={{background:"var(--pine)"}}>Toevoegen</button>
+          </form>
+        </div>
+
+        <div className="bg-white/60 rounded-lg border border-[var(--line)] p-4">
+          <h3 className="font-display text-lg mb-2" style={{color:"var(--pine)"}}>Genereren voor een jaar</h3>
+          <label className="block text-xs text-stone-500 mb-1">Jaar</label>
+          <input type="number" value={year} onChange={e=>setYear(parseInt(e.target.value,10))} className="w-full border border-[var(--line)] rounded px-2 py-1.5 text-sm focus-ring mb-2"/>
+          <button onClick={generateYear} disabled={busy || fixedWeeks.length===0} className="w-full py-2 rounded text-sm font-medium text-white" style={{background:"var(--brass)"}}>
+            {busy ? "Bezig..." : `Genereer boekingen voor ${year}`}
+          </button>
+          {genMsg && <p className="text-xs text-stone-600 mt-2">{genMsg}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- BEHEER TAB (enkel admin) ---------------- */
+function BeheerTab({ allProfiles, owners, ownerMap, reload }){
+  const confirmAction = useConfirm();
+  const [ownerChoice,setOwnerChoice]=useState({});
+
+  async function approve(p){
+    const chosenOwner = ownerChoice[p.id] || owners[0]?.id;
+    if(!chosenOwner){ await confirmAction("Geen eigenaarsgroep beschikbaar.", {alertOnly:true}); return; }
+    await supabase.from('profiles').update({ approved:true, owner_id: chosenOwner }).eq('id', p.id);
+    reload();
+  }
+  async function block(p){
+    if(!(await confirmAction(`${p.display_name} de toegang ontzeggen?`))) return;
+    await supabase.from('profiles').update({ approved:false }).eq('id', p.id);
+    reload();
+  }
+  async function reassign(p, newOwnerId){
+    await supabase.from('profiles').update({ owner_id: newOwnerId }).eq('id', p.id);
+    reload();
+  }
+
+  const pending = allProfiles.filter(p=>!p.approved);
+  const active = allProfiles.filter(p=>p.approved);
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white/60 rounded-lg border border-[var(--line)] p-4">
+        <h3 className="font-display text-lg mb-3" style={{color:"var(--pine)"}}>Wachtend op goedkeuring</h3>
+        {pending.length===0 && <p className="text-sm text-stone-500">Niemand wacht momenteel.</p>}
+        {pending.map(p=>(
+          <div key={p.id} className="ledger-row py-2 text-sm flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <span className="font-medium">{p.display_name}</span>
+              <p className="text-xs text-stone-500">{p.email}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select value={ownerChoice[p.id] || owners[0]?.id || ""} onChange={e=>setOwnerChoice(c=>({...c,[p.id]:e.target.value}))} className="border border-[var(--line)] rounded px-2 py-1 text-xs">
+                {owners.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+              <button onClick={()=>approve(p)} className="text-xs font-medium px-3 py-1 rounded-full text-white" style={{background:"var(--pine)"}}>Goedkeuren</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white/60 rounded-lg border border-[var(--line)] p-4">
+        <h3 className="font-display text-lg mb-3" style={{color:"var(--pine)"}}>Actieve gebruikers</h3>
+        {active.map(p=>{
+          const owner = p.owner_id ? ownerMap[p.owner_id] : null;
+          return (
+            <div key={p.id} className="ledger-row py-2 text-sm flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <span className="font-medium">{p.display_name}</span>
+                {p.role==='admin' && <span className="ml-2 text-[10px] uppercase tracking-wide" style={{color:"var(--brass)"}}>beheerder</span>}
+                <p className="text-xs text-stone-500">{p.email}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select value={p.owner_id || ""} onChange={e=>reassign(p, e.target.value)} disabled={p.role==='admin'} className="border border-[var(--line)] rounded px-2 py-1 text-xs">
+                  {owners.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+                {p.role!=='admin' && <button onClick={()=>block(p)} className="text-xs text-red-700">blokkeer</button>}
+              </div>
+            </div>
+          );
+        })}
+        <p className="text-[11px] text-stone-500 mt-3">Een account volledig verwijderen kan enkel via Supabase zelf (Authentication → Users), niet vanuit de app.</p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- APP ---------------- */
+function App(){
+  const [session,setSession]=useState(undefined);
+  const [myProfile,setMyProfile]=useState(null);
+  const [allProfiles,setAllProfiles]=useState([]);
+  const [owners,setOwners]=useState([]);
+  const [tab,setTab]=useState("kalender");
+
+  useEffect(()=>{
+    supabase.auth.getSession().then(({data})=>setSession(data.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s)=>setSession(s));
+    return ()=> sub.subscription.unsubscribe();
+  },[]);
+
+  const loadAll = useCallback(async ()=>{
+    if(!session) return;
+    const [{ data: profs }, { data: own }] = await Promise.all([
+      supabase.from('profiles').select('*'),
+      supabase.from('owners').select('*')
+    ]);
+    setAllProfiles(profs || []);
+    setOwners(own || []);
+    setMyProfile((profs||[]).find(p=>p.id===session.user.id) || null);
+  },[session]);
+
+  useEffect(()=>{ loadAll(); },[loadAll]);
+
+  const LoadingScreen = () => (
+    <div className="min-h-screen flex items-center justify-center" style={{background:"var(--pine)"}}>
+      <span className="font-display text-2xl" style={{color:"var(--brass)"}}>{HOUSE_NAME}</span>
+    </div>
+  );
+  if(session===undefined) return <LoadingScreen/>;
+  if(!session) return <Login/>;
+  if(!myProfile) return <LoadingScreen/>;
+  if(!myProfile.approved) return <Wachtkamer/>;
+
+  const ownerMap = {}; owners.forEach(o=>ownerMap[o.id]=o);
+  const profilesById = {}; allProfiles.forEach(p=>profilesById[p.id]=p);
+  const approvedProfiles = allProfiles.filter(p=>p.approved);
+
+  return (
+    <div className="min-h-screen" style={{background:"var(--paper)"}}>
+      <Header profile={myProfile} tab={tab} setTab={setTab}/>
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+        {tab==="kalender" && <CalendarTab owners={owners} ownerMap={ownerMap} profilesById={profilesById} approvedProfiles={approvedProfiles} myProfile={myProfile}/>}
+        {tab==="kosten" && <KostenTab owners={owners} ownerMap={ownerMap} profilesById={profilesById} myProfile={myProfile}/>}
+        {tab==="onderhoud" && <OnderhoudTab approvedProfiles={approvedProfiles} profilesById={profilesById}/>}
+        {tab==="vasteweken" && <VasteWekenTab owners={owners} ownerMap={ownerMap} myProfile={myProfile}/>}
+        {tab==="beheer" && myProfile.role==="admin" && <BeheerTab allProfiles={allProfiles} owners={owners} ownerMap={ownerMap} reload={loadAll}/>}
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<ConfirmProvider><App/></ConfirmProvider>);
+</script>
+</body>
+</html>
