@@ -66,7 +66,7 @@ const EMAILJS_NOTIFY_TEMPLATE_ID = "PLAATS_HIER_JE_EMAILJS_NOTIFY_TEMPLATE_ID";
 const MASTER_EMAIL = "frederik@zero-degrees.be";
 if(window.emailjs) emailjs.init(EMAILJS_PUBLIC_KEY);
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const MONTHS = ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
 const DAYS = ["ma","di","wo","do","vr","za","zo"];
@@ -169,7 +169,7 @@ function Login(){
   async function submitLogin(e){
     e.preventDefault();
     setLoading(true); setError("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await sb.auth.signInWithPassword({ email, password });
     if(error) setError("Inloggen mislukt. Controleer e-mail en wachtwoord (en of je e-mail al bevestigd is).");
     setLoading(false);
   }
@@ -177,7 +177,7 @@ function Login(){
   async function submitRegister(e){
     e.preventDefault();
     setLoading(true); setError("");
-    const { error } = await supabase.auth.signUp({
+    const { error } = await sb.auth.signUp({
       email, password,
       options: { data: { display_name: name } }
     });
@@ -233,7 +233,7 @@ function Wachtkamer(){
       <div className="w-full max-w-sm bg-[var(--paper)] rounded-lg p-8 shadow-xl border border-[var(--line)] text-sm text-stone-700">
         <h1 className="font-display text-2xl mb-3" style={{color:"var(--pine)"}}>Bijna binnen</h1>
         <p>Je account is aangemaakt en bevestigd, maar moet nog goedgekeurd worden door de beheerder en gekoppeld aan een eigenaarsgroep. Even geduld.</p>
-        <button onClick={()=>supabase.auth.signOut()} className="w-full mt-5 py-2 rounded font-medium text-white" style={{background:"var(--pine)"}}>Uitloggen</button>
+        <button onClick={()=>sb.auth.signOut()} className="w-full mt-5 py-2 rounded font-medium text-white" style={{background:"var(--pine)"}}>Uitloggen</button>
       </div>
     </div>
   );
@@ -296,7 +296,7 @@ function Header({ profile, tab, setTab }){
             {profile ? `Ingelogd als ${profile.display_name}` : ""}
           </p>
         </div>
-        <button onClick={()=>supabase.auth.signOut()} className="text-xs uppercase tracking-wide border border-[var(--brass)] text-[var(--brass)] rounded-full px-4 py-1.5 hover:bg-[var(--brass)] hover:text-[var(--pine)] transition">
+        <button onClick={()=>sb.auth.signOut()} className="text-xs uppercase tracking-wide border border-[var(--brass)] text-[var(--brass)] rounded-full px-4 py-1.5 hover:bg-[var(--brass)] hover:text-[var(--pine)] transition">
           Uitloggen
         </button>
       </div>
@@ -406,8 +406,8 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
 
   const load = useCallback(async ()=>{
     const [{ data: bk }, { data: rq }] = await Promise.all([
-      supabase.from('bookings').select('*').order('start_date'),
-      supabase.from('week_requests').select('*').order('created_at',{ascending:false})
+      sb.from('bookings').select('*').order('start_date'),
+      sb.from('week_requests').select('*').order('created_at',{ascending:false})
     ]);
     setBookings(bk || []);
     setRequests(rq || []);
@@ -457,7 +457,7 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
       key_status: arrival.key_status, clean_needed: arrival.clean_needed, mid_stay_servicing: arrival.mid_stay_servicing,
       food_pack: arrival.food_pack, car_hire_transfers: arrival.car_hire_transfers, special_requirements: arrival.special_requirements
     };
-    const { error } = await supabase.from('bookings').insert(row);
+    const { error } = await sb.from('bookings').insert(row);
     if(error) setMsg("Boeken mislukt: " + error.message);
     else {
       setStart(""); setEnd(""); setNotes(""); setArrival(defaultArrivalValues(myProfile.display_name));
@@ -468,7 +468,7 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
 
   async function removeBooking(id){
     if(!(await confirmAction("Deze boeking verwijderen?"))) return;
-    await supabase.from('bookings').delete().eq('id', id);
+    await sb.from('bookings').delete().eq('id', id);
     load();
   }
 
@@ -486,7 +486,7 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
       key_status: confirmValues.key_status, clean_needed: confirmValues.clean_needed, mid_stay_servicing: confirmValues.mid_stay_servicing,
       food_pack: confirmValues.food_pack, car_hire_transfers: confirmValues.car_hire_transfers, special_requirements: confirmValues.special_requirements
     };
-    await supabase.from('bookings').update(updates).eq('id', b.id);
+    await sb.from('bookings').update(updates).eq('id', b.id);
     setConfirmingId(null);
     load();
     sendArrivalEmail({ ...b, ...updates });
@@ -494,7 +494,7 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
 
   async function requestWeek(b){
     if(!myOwnerId || myOwnerId===b.owner_id) return;
-    await supabase.from('week_requests').insert({
+    await sb.from('week_requests').insert({
       booking_id: b.id, requested_by_owner: myOwnerId, requested_by_profile: myProfile.id
     });
     load();
@@ -508,10 +508,10 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
   }
 
   async function respondRequest(req, approve){
-    await supabase.from('week_requests').update({ status: approve ? 'approved' : 'rejected' }).eq('id', req.id);
+    await sb.from('week_requests').update({ status: approve ? 'approved' : 'rejected' }).eq('id', req.id);
     const requester = profilesById[req.requested_by_profile];
     if(approve){
-      await supabase.from('bookings').update({ owner_id: req.requested_by_owner, booked_by: req.requested_by_profile, confirm_by:null }).eq('id', req.booking_id);
+      await sb.from('bookings').update({ owner_id: req.requested_by_owner, booked_by: req.requested_by_profile, confirm_by:null }).eq('id', req.booking_id);
     }
     load();
     if(requester){
@@ -694,7 +694,7 @@ function KostenTab({ owners, ownerMap, profilesById, myProfile }){
   const myOwnerId = myProfile.owner_id;
 
   const load = useCallback(async ()=>{
-    const { data, error } = await supabase.from('expenses').select('*').order('expense_date',{ascending:false});
+    const { data, error } = await sb.from('expenses').select('*').order('expense_date',{ascending:false});
     if(!error) setExpenses(data || []);
   },[]);
   useEffect(()=>{ load(); },[load]);
@@ -702,12 +702,12 @@ function KostenTab({ owners, ownerMap, profilesById, myProfile }){
   async function addExpense(e){
     e.preventDefault();
     if(!amount || !description || !myOwnerId) return;
-    await supabase.from('expenses').insert({ owner_id: myOwnerId, paid_by: myProfile.id, amount: parseFloat(amount), description, expense_date: date });
+    await sb.from('expenses').insert({ owner_id: myOwnerId, paid_by: myProfile.id, amount: parseFloat(amount), description, expense_date: date });
     setAmount(""); setDescription(""); load();
   }
   async function removeExpense(id){
     if(!(await confirmAction("Deze kost verwijderen?"))) return;
-    await supabase.from('expenses').delete().eq('id', id);
+    await sb.from('expenses').delete().eq('id', id);
     load();
   }
 
@@ -789,7 +789,7 @@ function OnderhoudTab({ approvedProfiles, profilesById }){
   const [assignedTo,setAssignedTo]=useState("");
 
   const load = useCallback(async ()=>{
-    const { data, error } = await supabase.from('cleaning_tasks').select('*').order('due_date',{ascending:true, nullsFirst:false});
+    const { data, error } = await sb.from('cleaning_tasks').select('*').order('due_date',{ascending:true, nullsFirst:false});
     if(!error) setTasks(data || []);
   },[]);
   useEffect(()=>{ load(); },[load]);
@@ -797,16 +797,16 @@ function OnderhoudTab({ approvedProfiles, profilesById }){
   async function addTask(e){
     e.preventDefault();
     if(!title) return;
-    await supabase.from('cleaning_tasks').insert({ title, due_date: dueDate || null, assigned_to: assignedTo || null });
+    await sb.from('cleaning_tasks').insert({ title, due_date: dueDate || null, assigned_to: assignedTo || null });
     setTitle(""); setDueDate(""); setAssignedTo(""); load();
   }
   async function setStatus(id, status){
-    await supabase.from('cleaning_tasks').update({ status }).eq('id', id);
+    await sb.from('cleaning_tasks').update({ status }).eq('id', id);
     load();
   }
   async function removeTask(id){
     if(!(await confirmAction("Deze taak verwijderen?"))) return;
-    await supabase.from('cleaning_tasks').delete().eq('id', id);
+    await sb.from('cleaning_tasks').delete().eq('id', id);
     load();
   }
 
@@ -888,7 +888,7 @@ function VasteWekenTab({ owners, ownerMap, myProfile }){
   const [busy,setBusy]=useState(false);
 
   const load = useCallback(async ()=>{
-    const { data, error } = await supabase.from('fixed_weeks').select('*').order('week_number');
+    const { data, error } = await sb.from('fixed_weeks').select('*').order('week_number');
     if(!error) setFixedWeeks(data || []);
   },[]);
   useEffect(()=>{ load(); },[load]);
@@ -896,7 +896,7 @@ function VasteWekenTab({ owners, ownerMap, myProfile }){
   async function addFixedWeek(e){
     e.preventDefault();
     if(!ownerId || !weekNumber) return;
-    await supabase.from('fixed_weeks').insert({
+    await sb.from('fixed_weeks').insert({
       owner_id: ownerId, week_number: parseInt(weekNumber,10),
       confirm_weeks_before: parseInt(confirmWeeksBefore,10) || 8, notes
     });
@@ -904,13 +904,13 @@ function VasteWekenTab({ owners, ownerMap, myProfile }){
   }
   async function removeFixedWeek(id){
     if(!(await confirmAction("Deze vaste week verwijderen?"))) return;
-    await supabase.from('fixed_weeks').delete().eq('id', id);
+    await sb.from('fixed_weeks').delete().eq('id', id);
     load();
   }
 
   async function generateYear(){
     setBusy(true); setGenMsg("");
-    const { data: existing } = await supabase.from('bookings').select('owner_id,start_date');
+    const { data: existing } = await sb.from('bookings').select('owner_id,start_date');
     let created=0, skipped=0;
     for(const fw of fixedWeeks){
       const start = isoWeekStart(year, fw.week_number);
@@ -919,7 +919,7 @@ function VasteWekenTab({ owners, ownerMap, myProfile }){
       const already = (existing||[]).some(b => b.owner_id===fw.owner_id && b.start_date===startStr);
       if(already){ skipped++; continue; }
       const confirmBy = fmt(addDays(start, -(fw.confirm_weeks_before*7)));
-      const { error } = await supabase.from('bookings').insert({
+      const { error } = await sb.from('bookings').insert({
         owner_id: fw.owner_id, booked_by: myProfile.id, start_date: startStr, end_date: fmt(end),
         notes: fw.notes || 'Vaste week', status:'voorbehouden', confirm_by: confirmBy
       });
@@ -997,16 +997,16 @@ function BeheerTab({ allProfiles, owners, ownerMap, reload }){
   async function approve(p){
     const chosenOwner = ownerChoice[p.id] || owners[0]?.id;
     if(!chosenOwner){ await confirmAction("Geen eigenaarsgroep beschikbaar.", {alertOnly:true}); return; }
-    await supabase.from('profiles').update({ approved:true, owner_id: chosenOwner }).eq('id', p.id);
+    await sb.from('profiles').update({ approved:true, owner_id: chosenOwner }).eq('id', p.id);
     reload();
   }
   async function block(p){
     if(!(await confirmAction(`${p.display_name} de toegang ontzeggen?`))) return;
-    await supabase.from('profiles').update({ approved:false }).eq('id', p.id);
+    await sb.from('profiles').update({ approved:false }).eq('id', p.id);
     reload();
   }
   async function reassign(p, newOwnerId){
-    await supabase.from('profiles').update({ owner_id: newOwnerId }).eq('id', p.id);
+    await sb.from('profiles').update({ owner_id: newOwnerId }).eq('id', p.id);
     reload();
   }
 
@@ -1069,16 +1069,16 @@ function App(){
   const [tab,setTab]=useState("kalender");
 
   useEffect(()=>{
-    supabase.auth.getSession().then(({data})=>setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s)=>setSession(s));
+    sb.auth.getSession().then(({data})=>setSession(data.session));
+    const { data: sub } = sb.auth.onAuthStateChange((_e, s)=>setSession(s));
     return ()=> sub.subscription.unsubscribe();
   },[]);
 
   const loadAll = useCallback(async ()=>{
     if(!session) return;
     const [{ data: profs }, { data: own }] = await Promise.all([
-      supabase.from('profiles').select('*'),
-      supabase.from('owners').select('*')
+      sb.from('profiles').select('*'),
+      sb.from('owners').select('*')
     ]);
     setAllProfiles(profs || []);
     setOwners(own || []);
