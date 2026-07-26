@@ -159,7 +159,7 @@ function ConfirmProvider({ children }){
 
 /* ---------------- LOGIN / REGISTREREN ---------------- */
 function Login(){
-  const [mode,setMode]=useState("login"); // login | register | registered
+  const [mode,setMode]=useState("login"); // login | register | registered | forgot | forgot_sent
   const [name,setName]=useState("");
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
@@ -186,6 +186,15 @@ function Login(){
     setLoading(false);
   }
 
+  async function submitForgot(e){
+    e.preventDefault();
+    setLoading(true); setError("");
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href.split('#')[0].split('?')[0] });
+    if(error) setError("Versturen mislukt: " + error.message);
+    else setMode("forgot_sent");
+    setLoading(false);
+  }
+
   if(mode==="registered"){
     return (
       <div className="min-h-screen flex items-center justify-center px-4" style={{background:"var(--pine)"}}>
@@ -194,6 +203,36 @@ function Login(){
           <p>Bevestig eerst je e-mailadres via de link die we net gestuurd hebben. Daarna kan je inloggen — de beheerder moet je account nog wel goedkeuren voor je iets kan boeken.</p>
           <button onClick={()=>setMode("login")} className="w-full mt-5 py-2 rounded font-medium text-white" style={{background:"var(--pine)"}}>Naar inloggen</button>
         </div>
+      </div>
+    );
+  }
+
+  if(mode==="forgot_sent"){
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4" style={{background:"var(--pine)"}}>
+        <div className="w-full max-w-sm bg-[var(--paper)] rounded-lg p-8 shadow-xl border border-[var(--line)] text-sm text-stone-700">
+          <h1 className="font-display text-2xl mb-3" style={{color:"var(--pine)"}}>Mail onderweg</h1>
+          <p>Check je mailbox ({email}) en klik op de link om een nieuw wachtwoord in te stellen.</p>
+          <button onClick={()=>setMode("login")} className="w-full mt-5 py-2 rounded font-medium text-white" style={{background:"var(--pine)"}}>Naar inloggen</button>
+        </div>
+      </div>
+    );
+  }
+
+  if(mode==="forgot"){
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4" style={{background:"var(--pine)"}}>
+        <form onSubmit={submitForgot} className="w-full max-w-sm bg-[var(--paper)] rounded-lg p-8 shadow-xl border border-[var(--line)]">
+          <h1 className="font-display text-2xl mb-1" style={{color:"var(--pine)"}}>Wachtwoord vergeten</h1>
+          <p className="text-sm text-stone-600 mb-6">Vul je e-mail in, je krijgt een link om een nieuw wachtwoord te kiezen.</p>
+          <label className="block text-xs uppercase tracking-wide text-stone-500 mb-1">E-mail</label>
+          <input className="w-full border border-[var(--line)] rounded px-3 py-2 mb-4 focus-ring" type="email" value={email} onChange={e=>setEmail(e.target.value)} required />
+          {error && <p className="text-red-700 text-sm mb-3">{error}</p>}
+          <button disabled={loading} className="w-full py-2 rounded font-medium text-white" style={{background:"var(--pine)"}}>
+            {loading ? "Bezig..." : "Verstuur link"}
+          </button>
+          <button type="button" onClick={()=>{ setMode("login"); setError(""); }} className="w-full mt-3 text-xs text-stone-500 underline">Terug naar inloggen</button>
+        </form>
       </div>
     );
   }
@@ -221,6 +260,9 @@ function Login(){
         <button type="button" onClick={()=>{ setMode(mode==="login" ? "register" : "login"); setError(""); }} className="w-full mt-3 text-xs text-stone-500 underline">
           {mode==="login" ? "Nog geen account? Registreer hier" : "Al een account? Log in"}
         </button>
+        {mode==="login" && (
+          <button type="button" onClick={()=>{ setMode("forgot"); setError(""); }} className="w-full mt-2 text-xs text-stone-500 underline">Wachtwoord vergeten?</button>
+        )}
       </form>
     </div>
   );
@@ -1111,6 +1153,37 @@ function BeheerTab({ allProfiles, owners, ownerMap, reload }){
   );
 }
 
+/* ---------------- NIEUW WACHTWOORD INSTELLEN (na 'wachtwoord vergeten'-link) ---------------- */
+function SetNewPassword({ onDone }){
+  const [password,setPassword]=useState("");
+  const [error,setError]=useState("");
+  const [loading,setLoading]=useState(false);
+
+  async function submit(e){
+    e.preventDefault();
+    setLoading(true); setError("");
+    const { error } = await sb.auth.updateUser({ password });
+    if(error) setError("Mislukt: " + error.message);
+    else onDone();
+    setLoading(false);
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4" style={{background:"var(--pine)"}}>
+      <form onSubmit={submit} className="w-full max-w-sm bg-[var(--paper)] rounded-lg p-8 shadow-xl border border-[var(--line)]">
+        <h1 className="font-display text-2xl mb-1" style={{color:"var(--pine)"}}>Nieuw wachtwoord</h1>
+        <p className="text-sm text-stone-600 mb-6">Kies een nieuw wachtwoord voor je account.</p>
+        <label className="block text-xs uppercase tracking-wide text-stone-500 mb-1">Nieuw wachtwoord</label>
+        <input className="w-full border border-[var(--line)] rounded px-3 py-2 mb-4 focus-ring" type="password" value={password} onChange={e=>setPassword(e.target.value)} required minLength={6}/>
+        {error && <p className="text-red-700 text-sm mb-3">{error}</p>}
+        <button disabled={loading} className="w-full py-2 rounded font-medium text-white" style={{background:"var(--pine)"}}>
+          {loading ? "Bezig..." : "Wachtwoord opslaan"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 /* ---------------- APP ---------------- */
 function App(){
   const [session,setSession]=useState(undefined);
@@ -1118,10 +1191,14 @@ function App(){
   const [allProfiles,setAllProfiles]=useState([]);
   const [owners,setOwners]=useState([]);
   const [tab,setTab]=useState("kalender");
+  const [recovering,setRecovering]=useState(false);
 
   useEffect(()=>{
     sb.auth.getSession().then(({data})=>setSession(data.session));
-    const { data: sub } = sb.auth.onAuthStateChange((_e, s)=>setSession(s));
+    const { data: sub } = sb.auth.onAuthStateChange((event, s)=>{
+      if(event==='PASSWORD_RECOVERY') setRecovering(true);
+      setSession(s);
+    });
     return ()=> sub.subscription.unsubscribe();
   },[]);
 
@@ -1143,6 +1220,7 @@ function App(){
       <span className="font-display text-2xl" style={{color:"var(--brass)"}}>{HOUSE_NAME}</span>
     </div>
   );
+  if(recovering) return <SetNewPassword onDone={()=>setRecovering(false)}/>;
   if(session===undefined) return <LoadingScreen/>;
   if(!session) return <Login/>;
   if(!myProfile) return <LoadingScreen/>;
