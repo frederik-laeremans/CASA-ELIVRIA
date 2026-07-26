@@ -537,7 +537,24 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
   }
 
   function handleDayClick(day){
-    if(bookingFor(day)) return; // bezette dag: niet klikbaar
+    const b = bookingFor(day);
+    if(b){
+      if(b.status==='voorbehouden' && myOwnerId){
+        if(b.owner_id===myOwnerId){
+          openConfirm(b);
+          setMsg("Vul hieronder bij 'Aankomende boekingen' de aankomstgegevens in om te bevestigen.");
+        } else if(!myRequestFor(b.id)){
+          const owner = ownerMap[b.owner_id];
+          confirmAction(`Deze week (${fmt(parse(b.start_date))} → ${fmt(parse(b.end_date))}) is voorbehouden voor ${owner ? owner.name : "een andere groep"}, maar nog niet ingevuld. Wil je ze aanvragen?`)
+            .then(ok => { if(ok) requestWeek(b); });
+        } else {
+          setMsg("Je hebt deze week al aangevraagd — wacht op goedkeuring.");
+        }
+      } else if(b.status==='bevestigd'){
+        setMsg("Deze week is al bevestigd en niet beschikbaar.");
+      }
+      return;
+    }
     if(!pickStart){
       setPickStart(day); setStart(fmt(day)); setEnd(""); setMsg("");
       return;
@@ -593,7 +610,7 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
             const inPending = !owner && start && end && parse(start)<=day && day<parse(end);
             return (
               <div key={i} onClick={()=>handleDayClick(day)}
-                   className={"aspect-square rounded p-1 text-xs relative " + (inMonth ? "" : "opacity-30") + (owner ? "" : " cursor-pointer hover:ring-2 hover:ring-[var(--brass)]")}
+                   className={"aspect-square rounded p-1 text-xs relative " + (inMonth ? "" : "opacity-30") + ((!owner || reserved) ? " cursor-pointer hover:ring-2 hover:ring-[var(--brass)]" : "")}
                    style={{
                      background: owner ? (reserved ? "repeating-linear-gradient(45deg,"+owner.color+",_"+owner.color+"_4px,transparent_4px,transparent_8px)" : owner.color) : ((isPickStart||inPending) ? "var(--paper-dark)" : "#fff"),
                      color: owner ? "#fff" : "var(--ink)",
@@ -607,8 +624,9 @@ function CalendarTab({ owners, ownerMap, profilesById, approvedProfiles, myProfi
           })}
         </div>
         <p className="text-xs text-stone-500 mt-2">
-          {pickStart ? "Aankomst gekozen: " + fmt(pickStart) + " — klik nu je vertrekdag." : "Tip: klik een vrije dag voor aankomst, klik een tweede dag voor vertrek. Of typ de data hiernaast in."}
+          {pickStart ? "Aankomst gekozen: " + fmt(pickStart) + " — klik nu je vertrekdag." : "Tip: klik een vrije dag voor aankomst, klik een tweede dag voor vertrek. Klik een gestreept vakje om aan te vragen of te bevestigen."}
         </p>
+        {msg && <p className="text-xs text-red-700 mt-1">{msg}</p>}
         <div className="flex gap-3 mt-3 flex-wrap text-xs">
           {owners.map(o=>(
             <span key={o.id} className="flex items-center gap-1.5">
