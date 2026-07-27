@@ -326,7 +326,9 @@ function MarbellaBanner(){
 
 /* ---------------- HEADER / TABS ---------------- */
 function Header({ profile, tab, setTab }){
-  const tabs = [["kalender","Kalender"],["kosten","Kosten"],["onderhoud","Onderhoud"],["vasteweken","Vaste weken"]];
+  const tabs = [["kalender","Kalender"]];
+  if(profile && (profile.role==="admin" || profile.is_owner)) tabs.push(["kosten","Kosten"]);
+  tabs.push(["onderhoud","Onderhoud"],["vasteweken","Vaste weken"]);
   if(profile && profile.role==="admin") tabs.push(["beheer","Beheer"]);
   return (
     <header style={{background:"var(--pine)"}} className="text-[var(--paper)]">
@@ -1096,11 +1098,12 @@ function VasteWekenTab({ owners, ownerMap, myProfile }){
 function BeheerTab({ allProfiles, owners, ownerMap, reload }){
   const confirmAction = useConfirm();
   const [ownerChoice,setOwnerChoice]=useState({});
+  const [isOwnerChoice,setIsOwnerChoice]=useState({});
 
   async function approve(p){
     const chosenOwner = ownerChoice[p.id] || owners[0]?.id;
     if(!chosenOwner){ await confirmAction("Geen eigenaarsgroep beschikbaar.", {alertOnly:true}); return; }
-    await sb.from('profiles').update({ approved:true, owner_id: chosenOwner }).eq('id', p.id);
+    await sb.from('profiles').update({ approved:true, owner_id: chosenOwner, is_owner: !!isOwnerChoice[p.id] }).eq('id', p.id);
     reload();
   }
   async function block(p){
@@ -1110,6 +1113,10 @@ function BeheerTab({ allProfiles, owners, ownerMap, reload }){
   }
   async function reassign(p, newOwnerId){
     await sb.from('profiles').update({ owner_id: newOwnerId }).eq('id', p.id);
+    reload();
+  }
+  async function toggleIsOwner(p){
+    await sb.from('profiles').update({ is_owner: !p.is_owner }).eq('id', p.id);
     reload();
   }
 
@@ -1131,6 +1138,9 @@ function BeheerTab({ allProfiles, owners, ownerMap, reload }){
               <select value={ownerChoice[p.id] || owners[0]?.id || ""} onChange={e=>setOwnerChoice(c=>({...c,[p.id]:e.target.value}))} className="border border-[var(--line)] rounded px-2 py-1 text-xs">
                 {owners.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
+              <label className="flex items-center gap-1 text-xs text-stone-600">
+                <input type="checkbox" checked={!!isOwnerChoice[p.id]} onChange={e=>setIsOwnerChoice(c=>({...c,[p.id]:e.target.checked}))}/> eigenaar (ziet kosten)
+              </label>
               <button onClick={()=>approve(p)} className="text-xs font-medium px-3 py-1 rounded-full text-white" style={{background:"var(--pine)"}}>Goedkeuren</button>
             </div>
           </div>
@@ -1146,18 +1156,22 @@ function BeheerTab({ allProfiles, owners, ownerMap, reload }){
               <div>
                 <span className="font-medium">{p.display_name}</span>
                 {p.role==='admin' && <span className="ml-2 text-[10px] uppercase tracking-wide" style={{color:"var(--brass)"}}>beheerder</span>}
+                {p.is_owner && <span className="ml-2 text-[10px] uppercase tracking-wide" style={{color:"var(--pine)"}}>eigenaar</span>}
                 <p className="text-xs text-stone-500">{p.email}</p>
               </div>
               <div className="flex items-center gap-2">
                 <select value={p.owner_id || ""} onChange={e=>reassign(p, e.target.value)} disabled={p.role==='admin'} className="border border-[var(--line)] rounded px-2 py-1 text-xs">
                   {owners.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
+                <button onClick={()=>toggleIsOwner(p)} className="text-xs px-2 py-1 rounded border border-[var(--line)]">
+                  {p.is_owner ? "maak gast" : "maak eigenaar"}
+                </button>
                 {p.role!=='admin' && <button onClick={()=>block(p)} className="text-xs text-red-700">blokkeer</button>}
               </div>
             </div>
           );
         })}
-        <p className="text-[11px] text-stone-500 mt-3">Een account volledig verwijderen kan enkel via Supabase zelf (Authentication → Users), niet vanuit de app.</p>
+        <p className="text-[11px] text-stone-500 mt-3">Enkel "eigenaar" (Chris/Gitta/Geert zelf) ziet het tabblad Kosten. Gasten en kinderen zien dat niet, maar kunnen wel gewoon boeken. Een account volledig verwijderen kan enkel via Supabase zelf (Authentication → Users), niet vanuit de app.</p>
       </div>
     </div>
   );
@@ -1245,7 +1259,7 @@ function App(){
       <Header profile={myProfile} tab={tab} setTab={setTab}/>
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
         {tab==="kalender" && <CalendarTab owners={owners} ownerMap={ownerMap} profilesById={profilesById} approvedProfiles={approvedProfiles} myProfile={myProfile}/>}
-        {tab==="kosten" && <KostenTab owners={owners} ownerMap={ownerMap} profilesById={profilesById} myProfile={myProfile}/>}
+        {tab==="kosten" && (myProfile.role==="admin" || myProfile.is_owner) && <KostenTab owners={owners} ownerMap={ownerMap} profilesById={profilesById} myProfile={myProfile}/>}
         {tab==="onderhoud" && <OnderhoudTab approvedProfiles={approvedProfiles} profilesById={profilesById}/>}
         {tab==="vasteweken" && <VasteWekenTab owners={owners} ownerMap={ownerMap} myProfile={myProfile}/>}
         {tab==="beheer" && myProfile.role==="admin" && <BeheerTab allProfiles={allProfiles} owners={owners} ownerMap={ownerMap} reload={loadAll}/>}
